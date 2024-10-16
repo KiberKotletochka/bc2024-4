@@ -43,6 +43,24 @@ const server = http.createServer(async function (req, res) {
                 res.end('404 image not found');
             }
         }
+    } else if (req.method === 'DELETE') {
+        console.log(`Processing DELETE request for status code: ${statusCode}`);
+
+        try {
+            await fs.unlink(filePath);
+            res.writeHead(200, {'Content-Type': 'text/plain'});
+            res.end('Image deleted');
+        } catch (err) {
+            console.log(`Delete failed, trying to serve 404 image: ${err}`);
+            try {
+                const image404 = await fs.readFile(`${cache}/404.jpg`);
+                res.writeHead(404, {'Content-Type': 'image/jpeg'});
+                res.end(image404);
+            } catch (err) {
+                res.writeHead(404, {'Content-Type': 'text/plain'});
+                res.end('404 image not found');
+            }
+        }
     } else {
         res.writeHead(405, {'Content-Type': 'text/plain'});
         res.end('Method not allowed');
