@@ -11,69 +11,71 @@ program
 program.parse();
 const { host, port, cache } = program.opts();
 
-const server = http.createServer(async function (req, res) {
+const server = http.createServer((req, res) => {
     console.log(`Received request: ${req.method} ${req.url}`);
     const statusCode = req.url.slice(1);
     const filePath = `${cache}/${statusCode}.jpg`;
+
     if (req.method === 'PUT') {
         console.log(`Processing PUT request for status code: ${statusCode}`);
 
         let body = [];
         req.on('data', chunk => body.push(chunk));
-        req.on('end', async () => {
+        req.on('end', () => {
             body = Buffer.concat(body);
             console.log(`Saving image to: ${filePath}`);
-            await fs.writeFile(filePath, body);
-            res.writeHead(201, {'Content-Type': 'text/plain'});
-            res.end('Image saved');
-        });
+
+            fs.writeFile(filePath, body)
+                .then(() => {
+                    res.writeHead(201, {'Content-Type': 'text/plain'});
+                    res.end('Image saved');
+                })
+                .catch(err => {
+                    console.log(`Error saving image: ${err}`);
+                    res.writeHead(500, {'Content-Type': 'text/plain'});
+                    res.end('Internal Server Error');
+                });
+        })
+
     } else if (req.method === 'GET') {
         console.log(`Processing GET request for status code: ${statusCode}`);
 
-        try {
-            const image = await fs.readFile(filePath);
-            res.writeHead(200, {'Content-Type': 'image/jpeg'});
-            res.end(image);
-        } catch (err) {
-            console.log(`Image not found in cache, fetching from http.cat`);
-            try {
-                const response = await superagent.get(`https://http.cat/${statusCode}`);
-                const image = response.body;
-
-                await fs.writeFile(filePath, image);
+        fs.readFile(filePath)
+            .then(image => {
                 res.writeHead(200, {'Content-Type': 'image/jpeg'});
                 res.end(image);
-            } catch (err) {
-                console.log(`Failed to fetch from http.cat, trying to serve 404 image:`);
-                try {
-                    const image404 = await fs.readFile(`${cache}/404.jpg`);
-                    console.log(`Successfully fetched 404 image from cache`);
-                    res.writeHead(404, {'Content-Type': 'image/jpeg'});
-                    res.end(image404);
-                } catch (err) {
-                    res.writeHead(404, {'Content-Type': 'text/plain'});
-                    res.end('404 image not found');
-                }
-            }
-        }
+            })
+            .catch (err => {
+            console.log(`Image not found in cache, fetching from http.cat`);
+
+                superagent.get(`https://http.cat/${statusCode}`)
+                    .then(response => {
+                        const image = response.body;
+                        return fs.writeFile(filePath, image)
+                            .then(() => {
+                                res.writeHead(200, {'Content-Type': 'image/jpeg'});
+                                res.end(image);
+                            });
+                    })
+                    .catch(err => {
+                        console.log(`Failed to fetch from http.cat: ${err}`);
+                        res.writeHead(404, {'Content-Type': 'text/plain'});
+                        res.end('Image not found');
+                    });
+            });
     } else if (req.method === 'DELETE') {
         console.log(`Processing DELETE request for status code: ${statusCode}`);
 
-        try {
-            await fs.unlink(filePath);
-            res.writeHead(200, {'Content-Type': 'text/plain'});
-            res.end('Image deleted');
-        } catch (err) {
-            console.log(`Delete failed, trying to serve 404 image: ${err}`);
-            try {
-                const image404 = await fs.readFile(`${cache}/404.jpg`);
-                res.writeHead(404, {'Content-Type': 'image/jpeg'});
-                res.end(image404);
-            } catch (err) {
-                res.writeHead(404, {'Content-Type': 'text/plain'});
-                res.end('404 image not found');
-            }
-        }
+        fs.unlink(filePath)
+            .then(() => {
+                res.writeHead(200, {'Content-Type': 'text/plain'});
+                res.end('Image deleted');
+            })
+            .catch(err => {
+                console.log(`Delete failed ${err}`);
+                        res.writeHead(404, {'Content-Type': 'text/plain'});
+                        res.end('Image not found');
+                    });
     } else {
         res.writeHead(405, {'Content-Type': 'text/plain'});
         res.end('Method not allowed');
