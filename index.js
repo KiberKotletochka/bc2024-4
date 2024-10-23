@@ -23,7 +23,14 @@ const server = http.createServer((req, res) => {
         req.on('data', chunk => body.push(chunk));
         req.on('end', () => {
             body = Buffer.concat(body);
-            console.log(`Saving image to: ${filePath}`);
+
+            if (!body.length) {
+                res.writeHead(400, {'Content-Type': 'text/plain'});
+                res.end('No image in request body');
+                return;
+            }
+
+                console.log(`Saving image to: ${filePath}`);
 
             fs.writeFile(filePath, body)
                 .then(() => {
